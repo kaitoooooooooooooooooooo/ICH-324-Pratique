@@ -1,0 +1,59 @@
+name: Release Pipeline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  BUILD_WORKFLOW: build.yml
+  ARTIFACT_NAME: build-artifact
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupération du code source
+        uses: actions/checkout@v5
+
+      - name: Récupération de l'artefact du dernier build réussi
+        uses: dawidd6/action-download-artifact@v28
+        with:
+          workflow: ${{ env.BUILD_WORKFLOW }}
+          workflow_conclusion: success
+          branch: ${{ github.ref_name }}
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+
+      - name: Lecture et validation de la version (SemVer)
+        run: |
+          VERSION=$(jq -r .version dist/package.json)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$VERSION' n'est pas une version SemVer valide (X.Y.Z)"
+            exit 1
+          fi
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Vérification que le tag n'existe pas déjà
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::Le tag $TAG existe déjà, cette version a déjà été publiée"
+            exit 1
+          fi
+
+      - name: Création du tag Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Publication de la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Release ${{ env.TAG }}
+          generate_release_notes: true
+          files: dist/**

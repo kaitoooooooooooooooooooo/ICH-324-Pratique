@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Exécution des tests
-        run: npm test
+        run: npm run test:coverage
 
       - name: Publication des résultats de tests
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -44,3 +44,8 @@ jobs:
             index.js
             package.json
             junit.xml
+      - name: Partage du rapport de couverture
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
